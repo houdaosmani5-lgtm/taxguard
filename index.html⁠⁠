@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TaxGuard — Tax Compliance Monitoring</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }
+    .container { max-width: 1000px; margin: auto; }
+    h1 { color: #38bdf8; margin-bottom: 6px; }
+    p { color: #94a3b8; margin-top: 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 20px 0; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 16px; }
+    label { display: block; margin-top: 10px; font-size: 13px; color: #cbd5e1; }
+    input, select { width: 100%; padding: 8px; margin-top: 4px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; }
+    button { margin-top: 14px; padding: 10px 14px; border: none; border-radius: 6px; background: #0284c7; color: #fff; font-weight: bold; cursor: pointer; }
+    button.sec { background: #334155; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+    .kpi { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px; text-align: center; }
+    .kpi span { display: block; font-size: 12px; color: #94a3b8; }
+    .kpi strong { font-size: 20px; }
+    table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; font-size: 13px; }
+    th, td { padding: 10px; border-bottom: 1px solid #334155; text-align: left; }
+    th { background: #0b1120; color: #38bdf8; }
+    .badge { padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: bold; }
+    .COMPLIANT { background: #166534; color: #bbf7d0; }
+    .WARNING { background: #854d0e; color: #fef08a; }
+    .NON_COMPLIANT { background: #991b1b; color: #fecaca; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>TaxGuard</h1>
+    <p>Tax Compliance Monitoring — Evaluate transactions against tax rules</p>
+
+    <div class="kpis">
+      <div class="kpi"><span>Total</span><strong id="kTotal">0</strong></div>
+      <div class="kpi"><span>Compliant</span><strong id="kOk" style="color:#4ade80">0</strong></div>
+      <div class="kpi"><span>Warnings</span><strong id="kWarn" style="color:#facc15">0</strong></div>
+      <div class="kpi"><span>Non-Compliant</span><strong id="kFail" style="color:#f87171">0</strong></div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Check Transaction</h3>
+        <label>Transaction ID</label>
+        <input id="txId" value="TX-101" />
+
+        <label>Type</label>
+        <select id="txType">
+          <option value="SALE">Domestic Sale (19% VAT)</option>
+          <option value="REDUCED">Reduced Rate (9% VAT)</option>
+          <option value="EXPORT">Export (0% VAT)</option>
+        </select>
+
+        <label>Amount</label>
+        <input id="amount" type="number" value="1000" />
+
+        <label>Tax Charged</label>
+        <input id="taxAmount" type="number" value="190" />
+
+        <label>Customer Type</label>
+        <select id="custType">
+          <option value="B2C">B2C</option>
+          <option value="B2B">B2B</option>
+        </select>
+
+        <label>Customer Tax ID</label>
+        <input id="taxId" placeholder="Required for B2B" />
+
+        <button onclick="addFromForm()">Evaluate</button>
+        <button class="sec" onclick="loadSamples()">Sample Data</button>
+      </div>
+
+      <div class="card">
+        <h3>Active Tax Rules</h3>
+        <ul>
+          <li><b>RULE-01 (HIGH):</b> Domestic sale must equal 19% VAT.</li>
+          <li><b>RULE-02 (HIGH):</b> Reduced rate must equal 9% VAT.</li>
+          <li><b>RULE-03 (HIGH):</b> Export must have 0 tax.</li>
+          <li><b>RULE-04 (MEDIUM):</b> B2B must include a Tax ID.</li>
+          <li><b>RULE-05 (LOW):</b> Amount &gt; 50,000 triggers review warning.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Type</th>
+            <th>Cust</th>
+            <th>Amount</th>
+            <th>Tax</th>
+            <th>Status</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    let logs = [];
+    let num = 102;
+
+    function checkTx(tx) {
+      const issues = [];
+      if (tx.type === 'SALE') {
+        const exp = Number((tx.amount * 0.19).toFixed(2));
+        if (Math.abs(tx.tax - exp) > 0.01) issues.push({ sev: 'HIGH', msg: `Expected 19% (${exp}), got ${tx.tax}` });
+      }
+      if (tx.type === 'REDUCED') {
+        const exp = Number((tx.amount * 0.09).toFixed(2));
+        if (Math.abs(tx.tax - exp) > 0.01) issues.push({ sev: 'HIGH', msg: `Expected 9% (${exp}), got ${tx.tax}` });
+      }
+      if (tx.type === 'EXPORT' && tx.tax !== 0) {
+        issues.push({ sev: 'HIGH', msg: `Export tax must be 0, got ${tx.tax}` });
+      }
+      if (tx.custType === 'B2B' && !tx.taxId.trim()) {
+        issues.push({ sev: 'MEDIUM', msg: `Missing Tax ID for B2B` });
+      }
+      if (tx.amount > 50000) {
+        issues.push({ sev: 'LOW', msg: `Amount > 50,000 audit threshold` });
+      }
+
+      let status = 'COMPLIANT';
+      if (issues.some(i => i.sev === 'HIGH')) status = 'NON_COMPLIANT';
+      else if (issues.length) status = 'WARNING';
+
+      return { ...tx, status, details: issues.map(i => i.msg).join(' | ') || 'Compliant' };
+    }
+
+    function pushTx(tx) {
+      logs.unshift(checkTx(tx));
+      render();
+    }
+
+    function addFromForm() {
+      pushTx({
+        id: document.getElementById('txId').value || `TX-${num}`,
+        type: document.getElementById('txType').value,
+        amount: parseFloat(document.getElementById('amount').value) || 0,
+        tax: parseFloat(document.getElementById('taxAmount').value) || 0,
+        custType: document.getElementById('custType').value,
+        taxId: document.getElementById('taxId').value
+      });
+      document.getElementById('txId').value = `TX-${num++}`;
+    }
+
+    function loadSamples() {
+      [
+        { id: 'TX-201', type: 'SALE', amount: 1000, tax: 190, custType: 'B2C', taxId: '' },
+        { id: 'TX-202', type: 'SALE', amount: 1000, tax: 100, custType: 'B2C', taxId: '' },
+        { id: 'TX-203', type: 'EXPORT', amount: 5000, tax: 0, custType: 'B2B', taxId: 'NIF-123' },
+        { id: 'TX-204', type: 'REDUCED', amount: 2000, tax: 180, custType: 'B2B', taxId: '' }
+      ].forEach(pushTx);
+    }
+
+    function render() {
+      document.getElementById('tbody').innerHTML = logs.map(r => `
+        <tr>
+          <td>${r.id}</td>
+          <td>${r.type}</td>
+          <td>${r.custType}</td>
+          <td>${r.amount}</td>
+          <td>${r.tax}</td>
+          <td><span class="badge ${r.status}">${r.status}</span></td>
+          <td>${r.details}</td>
+        </tr>
+      `).join('');
+
+      document.getElementById('kTotal').textContent = logs.length;
+      document.getElementById('kOk').textContent = logs.filter(x => x.status === 'COMPLIANT').length;
+      document.getElementById('kWarn').textContent = logs.filter(x => x.status === 'WARNING').length;
+      document.getElementById('kFail').textContent = logs.filter(x => x.status === 'NON_COMPLIANT').length;
+    }
+
+    loadSamples();
+  </script>
+</body>
+</html>
